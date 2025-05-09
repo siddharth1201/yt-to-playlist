@@ -1,5 +1,8 @@
 import axios from 'axios';
 import { Course, Lecture, Section } from '../types';
+
+
+
 // import { extractPlaylistId } from '../utils/formatters';
 
 // Mock data for development purposes since we can't actually use the YouTube API without a key
@@ -139,7 +142,7 @@ const generateMockCourseData = (playlistUrl: string): Course => {
  * For now, we're using mock data
  */
 
-const YOUTUBE_API_KEY = 'AIzaSyCuvIqKE_orWXrdXb2Ryii2dXfCW0j9QWc';
+const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
 
 const extractPlaylistId = (url: string): string => {
   const regex = /[?&]list=([a-zA-Z0-9_-]+)/;
