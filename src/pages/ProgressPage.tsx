@@ -18,25 +18,30 @@ export const ProgressPage: React.FC = () => {
   
   useEffect(() => {
     // Load all courses and compute progress statistics
-    const loadCourses = () => {
-      const savedCourses = getAllCourses();
+    const loadCourses = async () => {
+      const savedCourses = await getAllCourses();
       setCourses(savedCourses);
-      
+  
       let completedLectures = 0;
       let watchedTime = 0;
       let remainingLectures = 0;
       const dailyProgressMap: Record<string, DailyProgressStats> = {};
-      
-      savedCourses.forEach(course => {
-        const progress = getCourseProgress(course.id);
-        
+  
+      // Await all progress objects in parallel
+      const progressArray = await Promise.all(
+        savedCourses.map(course => getCourseProgress(course.id))
+      );
+  
+      savedCourses.forEach((course, idx) => {
+        const progress = progressArray[idx];
+  
         if (progress) {
           // Add completed lectures
           completedLectures += progress.completedLectures.length;
-          
+  
           // Calculate remaining lectures
           remainingLectures += course.totalLectures - progress.completedLectures.length;
-          
+  
           // Aggregate daily progress data
           Object.values(progress.dailyProgress).forEach(dayData => {
             if (!dailyProgressMap[dayData.date]) {
@@ -46,20 +51,20 @@ export const ProgressPage: React.FC = () => {
                 minutesWatched: 0
               };
             }
-            
+  
             dailyProgressMap[dayData.date].completedCount += dayData.completedCount;
             dailyProgressMap[dayData.date].minutesWatched += dayData.minutesWatched;
-            
+  
             // Add to total watched time (convert minutes to seconds for consistency)
             watchedTime += dayData.minutesWatched * 60;
           });
         }
       });
-      
+  
       setTotalCompletedLectures(completedLectures);
       setTotalWatchedTime(watchedTime);
       setTotalRemainingLectures(remainingLectures);
-      
+  
       // Process weekly progress data (last 7 days)
       const last7Days = getLast7Days();
       const weeklyData: DailyProgressStats[] = last7Days.map(date => {
@@ -69,11 +74,11 @@ export const ProgressPage: React.FC = () => {
           minutesWatched: 0
         };
       });
-      
+  
       setWeeklyProgress(weeklyData);
       setIsLoading(false);
     };
-    
+  
     loadCourses();
   }, []);
   

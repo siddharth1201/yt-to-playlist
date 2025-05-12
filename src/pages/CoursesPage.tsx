@@ -14,45 +14,55 @@ export const CoursesPage: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [progressData, setProgressData] = useState<Record<string, Progress>>({});
   const [isLoading, setIsLoading] = useState(true);
-  
+
   useEffect(() => {
-    // Load all courses
-    const loadCourses = () => {
-      const savedCourses = getAllCourses();
-      setCourses(savedCourses);
-      
-      // Load progress data for each course
+    const loadCourses = async () => {
+      setIsLoading(true);
+      const savedCourses = await getAllCourses();
+      const normalizedCourses = savedCourses.map(course => ({
+        ...course,
+        lectures: Array.isArray(course.sections)
+          ? course.sections.flatMap(section => section.lectures || [])
+          : [],
+      })) as (Course & { lectures: any[] })[];
+  
+      setCourses(normalizedCourses);
+  
       const progress: Record<string, Progress> = {};
-      savedCourses.forEach(course => {
-        const courseProgress = getCourseProgress(course.id);
+      for (const course of normalizedCourses) {
+        const courseProgress = await getCourseProgress(course.id);
         if (courseProgress) {
           progress[course.id] = courseProgress;
         }
-      });
-      
+      }
       setProgressData(progress);
       setIsLoading(false);
     };
-    
+  
     loadCourses();
   }, []);
-  
+
   const handleNavigateToAddCourse = () => {
     navigate('/');
   };
-  
+
   const handleSelectCourse = (courseId: string) => {
     navigate(`/courses/${courseId}`);
   };
 
-  const handleDeleteCourse = (courseId: string) => {
+  const handleDeleteCourse = async (courseId: string) => {
     if (window.confirm('Are you sure you want to delete this course? This action cannot be undone.')) {
-      deleteCourse(courseId);
-      // Update the courses list
+      await deleteCourse(courseId);
+      // Update the courses list and progress data
       setCourses(prevCourses => prevCourses.filter(course => course.id !== courseId));
+      setProgressData(prevProgress => {
+        const newProgress = { ...prevProgress };
+        delete newProgress[courseId];
+        return newProgress;
+      });
     }
   };
-  
+
   // Item animation variants for staggered animation
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -63,7 +73,7 @@ export const CoursesPage: React.FC = () => {
       }
     }
   };
-  
+
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: {
@@ -74,7 +84,7 @@ export const CoursesPage: React.FC = () => {
       }
     }
   };
-  
+
   return (
     <PageTransition>
       <div className="container mx-auto px-4 py-8">
@@ -85,7 +95,7 @@ export const CoursesPage: React.FC = () => {
               {courses.length} {courses.length === 1 ? 'course' : 'courses'} in your library
             </p>
           </div>
-          
+
           <Button
             variant="primary"
             startIcon={<Plus size={16} />}
@@ -94,7 +104,7 @@ export const CoursesPage: React.FC = () => {
             Add Course
           </Button>
         </div>
-        
+
         {isLoading ? (
           <div className="flex justify-center py-20">
             <div className="animate-pulse flex flex-col items-center">
@@ -124,6 +134,7 @@ export const CoursesPage: React.FC = () => {
           </Card>
         ) : (
           <motion.div
+            key={courses.length} // helps re-trigger animation on change
             variants={containerVariants}
             initial="hidden"
             animate="visible"
@@ -135,7 +146,7 @@ export const CoursesPage: React.FC = () => {
                   course={course}
                   progress={progressData[course.id]}
                   onClick={() => handleSelectCourse(course.id)}
-                  onDelete={(e) => handleDeleteCourse(course.id)} // Add this prop
+                  onDelete={() => handleDeleteCourse(course.id)}
                 />
               </motion.div>
             ))}

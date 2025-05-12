@@ -27,9 +27,9 @@ export const useProgress = (course: Course | null): UseProgressReturn => {
       return;
     }
     
-    const fetchProgress = () => {
+    const fetchProgress = async () => {
       setIsLoading(true);
-      const progressData = getCourseProgress(course.id);
+      const progressData = await getCourseProgress(course.id);
       setProgress(progressData);
       
       if (progressData) {

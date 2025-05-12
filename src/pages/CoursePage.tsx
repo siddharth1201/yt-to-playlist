@@ -35,8 +35,8 @@ export const CoursePage: React.FC = () => {
     }
     
     // Load course data
-    const loadCourse = () => {
-      const courseData = getCourseById(courseId);
+    const loadCourse = async () => {
+      const courseData = await getCourseById(courseId);
       
       if (!courseData) {
         navigate('/courses');
@@ -46,7 +46,7 @@ export const CoursePage: React.FC = () => {
       setCourse(courseData);
       
       // Get progress data
-      const progressData = getCourseProgress(courseId);
+      const progressData = await getCourseProgress(courseId);
       
       // Determine which lecture to show
       let lectureToShow: Lecture | null = null;

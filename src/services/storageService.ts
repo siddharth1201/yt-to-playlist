@@ -1,3 +1,4 @@
+import { get, set, del } from 'idb-keyval';
 import { AppState, Course, Progress } from '../types';
 import { getTodayDate } from '../utils/formatters';
 
@@ -12,56 +13,43 @@ const defaultState: AppState = {
 };
 
 /**
- * Load the app state from localStorage
+ * Load the app state from IndexedDB
  */
-export const loadState = (): AppState => {
+export const loadState = async (): Promise<AppState> => {
   try {
-    const serializedState = localStorage.getItem(APP_STATE_KEY);
-    if (!serializedState) return defaultState;
-    return JSON.parse(serializedState);
+    const state = await get<AppState>(APP_STATE_KEY);
+    return state || defaultState;
   } catch (err) {
-    console.error('Error loading state from localStorage:', err);
+    console.error('Error loading state from IndexedDB:', err);
     return defaultState;
   }
 };
 
 /**
- * Save the app state to localStorage
+ * Save the app state to IndexedDB
  */
-export const saveState = (state: AppState): void => {
+export const saveState = async (state: AppState): Promise<void> => {
   try {
-    const serializedState = JSON.stringify(state);
-    localStorage.setItem(APP_STATE_KEY, serializedState);
+    await set(APP_STATE_KEY, state);
   } catch (err) {
-    console.error('Error saving state to localStorage:', err);
-    // Notify user if storage fails (e.g., quota exceeded)
-    if (err instanceof DOMException && err.code === 22) {
-      console.warn('Storage quota exceeded. Some data may not be saved.');
-      // Attempt to save critical data only
-      saveReducedState(state);
-    }
+    console.error('Error saving state to IndexedDB:', err);
   }
 };
 
 /**
  * Attempt to save reduced state when storage quota is exceeded
  */
-const saveReducedState = (state: AppState): void => {
+const saveReducedState = async (state: AppState): Promise<void> => {
   try {
-    // Create a reduced version of the state with only essential data
     const reducedState: AppState = {
       courses: state.courses,
       currentCourse: state.currentCourse,
-      progress: {} // We'll add only current course progress
+      progress: {}
     };
-    
-    // Add progress for current course if available
     if (state.currentCourse) {
       reducedState.progress[state.currentCourse.id] = state.progress[state.currentCourse.id];
     }
-    
-    const serializedReducedState = JSON.stringify(reducedState);
-    localStorage.setItem(APP_STATE_KEY, serializedReducedState);
+    await set(APP_STATE_KEY, reducedState);
   } catch (err) {
     console.error('Failed to save even reduced state:', err);
   }
@@ -70,21 +58,16 @@ const saveReducedState = (state: AppState): void => {
 /**
  * Save a course to the storage
  */
-export const saveCourse = (course: Course): void => {
-  const state = loadState();
-  
-  // Check if course already exists
+export const saveCourse = async (course: Course): Promise<void> => {
+  const state = await loadState();
   const courseIndex = state.courses.findIndex(c => c.id === course.id);
-  
+
   if (courseIndex >= 0) {
-    // Update existing course
     state.courses[courseIndex] = course;
   } else {
-    // Add new course
     state.courses.push(course);
   }
 
-  // Initialize progress tracking if it doesn't exist
   if (!state.progress[course.id]) {
     state.progress[course.id] = {
       courseId: course.id,
@@ -103,27 +86,22 @@ export const saveCourse = (course: Course): void => {
       }
     };
   }
-  
-  // Set as current course
+
   state.currentCourse = course;
-  
-  saveState(state);
+  await saveState(state);
 };
 
 /**
  * Mark a lecture as completed
  */
-export const markLectureCompleted = (courseId: string, lectureId: string): void => {
-  const state = loadState();
+export const markLectureCompleted = async (courseId: string, lectureId: string): Promise<void> => {
+  const state = await loadState();
   const progress = state.progress[courseId];
-  
   if (!progress) return;
-  
-  // Check if lecture is already marked as completed
+
   if (!progress.completedLectures.includes(lectureId)) {
     progress.completedLectures.push(lectureId);
-    
-    // Update daily progress
+
     const today = getTodayDate();
     if (!progress.dailyProgress[today]) {
       progress.dailyProgress[today] = {
@@ -132,46 +110,37 @@ export const markLectureCompleted = (courseId: string, lectureId: string): void 
         minutesWatched: 0
       };
     }
-    
     progress.dailyProgress[today].completedCount += 1;
-    
-    // Save the updated state
-    saveState(state);
+    await saveState(state);
   }
 };
 
 /**
  * Mark a lecture as not completed
  */
-export const markLectureNotCompleted = (courseId: string, lectureId: string): void => {
-  const state = loadState();
+export const markLectureNotCompleted = async (courseId: string, lectureId: string): Promise<void> => {
+  const state = await loadState();
   const progress = state.progress[courseId];
-  
   if (!progress) return;
-  
-  // Remove lecture from completed lectures
+
   progress.completedLectures = progress.completedLectures.filter(id => id !== lectureId);
-  
-  // Save the updated state
-  saveState(state);
+  await saveState(state);
 };
 
 /**
  * Update last watched position for a lecture
  */
-export const updateLastWatched = (courseId: string, lectureId: string, timestamp: number): void => {
-  const state = loadState();
+export const updateLastWatched = async (courseId: string, lectureId: string, timestamp: number): Promise<void> => {
+  const state = await loadState();
   const progress = state.progress[courseId];
-  
   if (!progress) return;
-  
+
   progress.lastWatched = {
     lectureId,
     timestamp,
     lastAccessed: Date.now()
   };
-  
-  // Update daily progress for minutes watched
+
   const today = getTodayDate();
   if (!progress.dailyProgress[today]) {
     progress.dailyProgress[today] = {
@@ -180,68 +149,56 @@ export const updateLastWatched = (courseId: string, lectureId: string, timestamp
       minutesWatched: 0
     };
   }
-  
-  // Add a minute to the watched time (simplified)
   progress.dailyProgress[today].minutesWatched += 1;
-  
-  saveState(state);
+  await saveState(state);
 };
 
 /**
  * Get course progress statistics
  */
-export const getCourseProgress = (courseId: string): Progress | null => {
-  const state = loadState();
+export const getCourseProgress = async (courseId: string): Promise<Progress | null> => {
+  const state = await loadState();
   return state.progress[courseId] || null;
 };
 
 /**
  * Get all saved courses
  */
-export const getAllCourses = (): Course[] => {
-  const state = loadState();
+export const getAllCourses = async (): Promise<Course[]> => {
+  const state = await loadState();
   return state.courses;
 };
 
 /**
  * Get course by ID
  */
-export const getCourseById = (courseId: string): Course | null => {
-  const state = loadState();
+export const getCourseById = async (courseId: string): Promise<Course | null> => {
+  const state = await loadState();
   return state.courses.find(course => course.id === courseId) || null;
 };
 
 /**
  * Delete a course and its progress data
  */
-export const deleteCourse = (courseId: string): void => {
-  const state = loadState();
-  
-  // Remove course
+export const deleteCourse = async (courseId: string): Promise<void> => {
+  const state = await loadState();
   state.courses = state.courses.filter(course => course.id !== courseId);
-  
-  // Remove progress data
   delete state.progress[courseId];
-  
-  // Clear current course if it's the one being deleted
   if (state.currentCourse && state.currentCourse.id === courseId) {
     state.currentCourse = null;
   }
-  
-  saveState(state);
+  await saveState(state);
 };
 
 /**
  * Export all user data to a JSON file for backup
  */
-export const exportData = (): void => {
+export const exportData = async (): Promise<void> => {
   try {
-    const state = loadState();
+    const state = await loadState();
     const dataStr = JSON.stringify(state, null, 2);
     const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}`;
-    
     const exportFileDefaultName = `youtube-course-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -254,47 +211,42 @@ export const exportData = (): void => {
 /**
  * Import data from a JSON file backup
  */
-export const importData = (jsonFile: File): Promise<boolean> => {
+export const importData = async (jsonFile: File): Promise<boolean> => {
   return new Promise((resolve, reject) => {
     const fileReader = new FileReader();
-    
-    fileReader.onload = (event) => {
+
+    fileReader.onload = async (event) => {
       try {
         if (!event.target || typeof event.target.result !== 'string') {
           throw new Error('Invalid file content');
         }
-        
         const importedState: AppState = JSON.parse(event.target.result);
-        
-        // Validate the imported data structure
         if (!importedState.courses || !importedState.progress) {
           throw new Error('Invalid data structure in the imported file');
         }
-        
-        // Save the imported state
-        saveState(importedState);
+        await saveState(importedState);
         resolve(true);
       } catch (err) {
         console.error('Error importing data:', err);
         reject(err);
       }
     };
-    
+
     fileReader.onerror = () => {
       reject(new Error('Error reading the file'));
     };
-    
+
     fileReader.readAsText(jsonFile);
   });
 };
 
 /**
- * Check available storage space in localStorage
+ * Check available storage size in IndexedDB
  * Returns approximate size in MB
  */
-export const checkStorageSize = (): number => {
+export const checkStorageSize = async (): Promise<number> => {
   try {
-    const state = loadState();
+    const state = await loadState();
     const serializedState = JSON.stringify(state);
     const sizeInBytes = new Blob([serializedState]).size;
     return sizeInBytes / (1024 * 1024); // Convert to MB
@@ -307,9 +259,9 @@ export const checkStorageSize = (): number => {
 /**
  * Clear all data from storage
  */
-export const clearAllData = (): void => {
+export const clearAllData = async (): Promise<void> => {
   try {
-    localStorage.removeItem(APP_STATE_KEY);
+    await del(APP_STATE_KEY);
   } catch (err) {
     console.error('Error clearing data:', err);
   }

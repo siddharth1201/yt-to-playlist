@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import GoogleSignInPopup from '../components/GoogleSignInPopup';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Youtube, ArrowRight } from 'lucide-react';
@@ -9,52 +10,35 @@ import { Button } from '../components/ui/Button';
 import { extractPlaylistId } from '../utils/formatters';
 import { fetchPlaylistData } from '../services/youtubeService';
 import { saveCourse } from '../services/storageService';
+import { decodeGoogleCredential } from '../services/jwtService';
+
+
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const [playlistUrl, setPlaylistUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    
-    if (!playlistUrl.trim()) {
-      setError('Please enter a YouTube playlist URL');
-      return;
+  const [user, setUser] = useState<any>(() => {
+    const stored = localStorage.getItem('user');
+    return stored ? JSON.parse(stored) : null;
+  });
+  const [showSignIn, setShowSignIn] = useState(false);
+  const [pendingCourseUrl, setPendingCourseUrl] = useState<string | null>(null);
+
+  // Save user to localStorage on login
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('user', JSON.stringify(user));
     }
-    
-    const playlistId = extractPlaylistId(playlistUrl);
-    if (!playlistId) {
-      setError('Invalid YouTube playlist URL');
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    try {
-      const courseData = await fetchPlaylistData(playlistUrl);
-      saveCourse(courseData);
-      
-      // Redirect to the course page
-      navigate(`/courses/${courseData.id}`);
-    } catch (err) {
-      console.error('Error fetching playlist:', err);
-      setError('Failed to fetch playlist data. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
+  }, [user]);
+
   // Animation for the background elements
-  React.useEffect(() => {
+  useEffect(() => {
     const elements = document.querySelectorAll('.floating-element');
-    
     elements.forEach(element => {
       const delay = Math.random() * 2;
       const duration = 3 + Math.random() * 2;
-      
       gsap.to(element, {
         y: '-20px',
         duration,
@@ -65,7 +49,69 @@ export const HomePage: React.FC = () => {
       });
     });
   }, []);
+
+  // Handler for Google login success
+  const handleGoogleLoginSuccess = (credentialResponse: any) => {
+    const decoded = decodeGoogleCredential(credentialResponse.credential);
+    setUser({
+      credential: credentialResponse.credential,
+      name: decoded.name,
+      email: decoded.email,
+      picture: decoded.picture,
+    });
+    setShowSignIn(false);
   
+    if (pendingCourseUrl) {
+      handleCreateCourse(pendingCourseUrl);
+      setPendingCourseUrl(null);
+    }
+  };
+
+  
+
+  // Handler for Google login error
+  const handleGoogleLoginError = () => {
+    alert('Google login failed');
+    setShowSignIn(false);
+  };
+
+  // Helper to handle course creation logic
+  const handleCreateCourse = async (url: string) => {
+    setError('');
+    const playlistId = extractPlaylistId(url);
+    if (!playlistId) {
+      setError('Invalid YouTube playlist URL');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const courseData = await fetchPlaylistData(url);
+      saveCourse(courseData);
+      navigate(`/courses/${courseData.id}`);
+    } catch (err) {
+      console.error('Error fetching playlist:', err);
+      setError('Failed to fetch playlist data. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Submit handler
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!playlistUrl.trim()) {
+      setError('Please enter a YouTube playlist URL');
+      return;
+    }
+    if (!user) {
+      setPendingCourseUrl(playlistUrl);
+      setShowSignIn(true);
+      return;
+    }
+    handleCreateCourse(playlistUrl);
+  };
+
   return (
     <PageTransition>
       <div className="min-h-[calc(100vh-64px)] relative overflow-hidden flex flex-col">
@@ -76,7 +122,7 @@ export const HomePage: React.FC = () => {
           <div className="floating-element absolute bottom-20 left-[20%] w-16 h-16 rounded-full bg-accent-tertiary/10"></div>
           <div className="floating-element absolute bottom-40 right-[25%] w-32 h-32 rounded-full bg-accent-primary/10"></div>
         </div>
-        
+
         <div className="flex-1 flex items-center justify-center container mx-auto px-4 py-12 z-10">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -93,7 +139,7 @@ export const HomePage: React.FC = () => {
               >
                 <Youtube size={40} />
               </motion.div>
-              
+
               <motion.h1 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -102,7 +148,7 @@ export const HomePage: React.FC = () => {
               >
                 Transform YouTube into Your Personal Learning Platform
               </motion.h1>
-              
+
               <motion.p 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -112,7 +158,7 @@ export const HomePage: React.FC = () => {
                 Track your progress, manage your learning journey, and never lose your place in tutorial playlists again.
               </motion.p>
             </div>
-            
+
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -130,7 +176,7 @@ export const HomePage: React.FC = () => {
                   startIcon={<Youtube size={18} />}
                   className="mb-4"
                 />
-                
+
                 <Button 
                   type="submit"
                   variant="primary"
@@ -141,12 +187,12 @@ export const HomePage: React.FC = () => {
                   Create Course
                 </Button>
               </form>
-              
+
               <div className="mt-4 text-sm text-text-muted">
                 <p>Example: <code className="bg-background-accent px-2 py-1 rounded text-text-secondary">https://www.youtube.com/playlist?list=PL4cUxeGkcC9gZD-Tvwfod2gaISzfRiP9d</code></p>
               </div>
             </motion.div>
-            
+
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -157,6 +203,13 @@ export const HomePage: React.FC = () => {
             </motion.div>
           </motion.div>
         </div>
+        {showSignIn && (
+          <GoogleSignInPopup
+            onSuccess={handleGoogleLoginSuccess}
+            onError={handleGoogleLoginError}
+            onClose={() => setShowSignIn(false)}
+          />
+        )}
       </div>
     </PageTransition>
   );
