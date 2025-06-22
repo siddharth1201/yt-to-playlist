@@ -11,6 +11,7 @@ import { extractPlaylistId } from '../utils/formatters';
 import { fetchPlaylistData } from '../services/youtubeService';
 import { saveCourse } from '../services/storageService';
 import { decodeGoogleCredential } from '../services/jwtService';
+import { InstallPWA } from '../components/ui/InstallPWA';
 
 
 
@@ -122,7 +123,10 @@ export const HomePage: React.FC = () => {
           <div className="floating-element absolute bottom-20 left-[20%] w-16 h-16 rounded-full bg-accent-tertiary/10"></div>
           <div className="floating-element absolute bottom-40 right-[25%] w-32 h-32 rounded-full bg-accent-primary/10"></div>
         </div>
-
+        
+        <InstallPWA />
+        
+        {/* Rest of your HomePage content */}
         <div className="flex-1 flex items-center justify-center container mx-auto px-4 py-12 z-10">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
